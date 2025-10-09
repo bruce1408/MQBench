@@ -46,8 +46,16 @@ class ConvBNActivation(nn.Sequential):
         if activation_layer is None:
             activation_layer = nn.ReLU6
         super(ConvBNReLU, self).__init__(
-            nn.Conv2d(in_planes, out_planes, kernel_size, stride, padding, dilation=dilation, groups=groups,
-                      bias=False),
+            nn.Conv2d(
+                in_planes, 
+                out_planes, 
+                kernel_size, 
+                stride, 
+                padding, 
+                dilation=dilation, 
+                groups=groups,
+                bias=False
+            ),
             norm_layer(out_planes),
             activation_layer(inplace=True)
         )

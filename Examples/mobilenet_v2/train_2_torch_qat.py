@@ -1,24 +1,34 @@
+import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
 import time
 import copy
-
+from dataset import get_dataset
+from common.configs import get_cfg_defaults
 from mqbench.prepare_by_platform import prepare_by_platform, BackendType
 from mqbench.convert_deploy import convert_deploy
 from mqbench.utils.state import enable_calibration, enable_quantization
-
-
 from mbv2 import mobilenet_v2
-from dataset import get_dataset
-from val import val
+
+cfg = get_cfg_defaults()
+os.environ["CUDA_VISIBLE_DEVICES"] = cfg.SYSTEM.CUDA_IDS
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+def val(model, val_dataset, dataloaders):
+    running_corrects = 0
+    for i, (inputs, labels) in enumerate(dataloaders):
+        inputs = inputs.cuda()
+        labels = labels.cuda()
+        outputs = model(inputs)
+        _, preds = torch.max(outputs, 1)
+        running_corrects += torch.sum(preds == labels.data)
+    print(f"Accuracy : {running_corrects / len(val_dataset) * 100}%")
 
 
-def train_model(
-    model, dataloaders, dataset_sizes, criterion, optimizer, scheduler, num_epochs=25
-):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+def train_model(model, dataloaders, dataset_sizes, criterion, optimizer, scheduler, device, num_epochs=25):
+    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     since = time.time()
     # liveloss = PlotLosses()
     best_model_wts = copy.deepcopy(model.state_dict())
@@ -31,7 +41,6 @@ def train_model(
         # Each epoch has a training and validation phase
         for phase in ["train", "val"]:
             if phase == "train":
-                scheduler.step()
                 model.train()  # Set model to training mode
             else:
                 model.eval()  # Set model to evaluate mode
@@ -74,6 +83,7 @@ def train_model(
 
             epoch_loss = running_loss / dataset_sizes[phase]
             epoch_acc = running_corrects.double() / dataset_sizes[phase]
+            
             if phase == "train":
                 avg_loss = epoch_loss
                 t_acc = epoch_acc
@@ -89,13 +99,11 @@ def train_model(
         print("Val Loss: {:.4f} Acc: {:.4f}".format(val_loss, val_acc), flush=True)
         print("Best Val Accuracy: {}".format(best_acc), flush=True)
         print()
-
+        
+        scheduler.step()
+    
     time_elapsed = time.time() - since
-    print(
-        "Training complete in {:.0f}m {:.0f}s".format(
-            time_elapsed // 60, time_elapsed % 60
-        ), flush=True
-    )
+    print("Training complete in {:.0f}m {:.0f}s".format( time_elapsed // 60, time_elapsed % 60), flush=True)
     print("Best val Acc: {:4f}".format(best_acc), flush=True)
 
     # load best model weights
@@ -109,8 +117,8 @@ model = mobilenet_v2(num_classes=200)
 # weight_imagenet.pop("classifier.1.weight")
 # weight_imagenet.pop("classifier.1.bias")
 # model.load_state_dict(weight_imagenet, strict=False)
-
-checkpoint = torch.load("models/mbv2_fp16.pth")
+model_path= "/mnt/share_disk/bruce_trie/workspace/Quantizer-Tools/MQBench/Examples/models/mbv2_fp16.pth"
+checkpoint = torch.load(model_path)
 ckpt = {}
 for k, v in checkpoint.items():
     if k.startswith('module.'):
@@ -122,27 +130,25 @@ model.load_state_dict(ckpt, strict=True)
 model.train()
 
 
-# prepare
-#########################################
+
+##################### prepare #####################
 extra_qconfig_dict = {
     'w_observer': 'MSEObserver',
     'a_observer': 'EMAMSEObserver',
     'w_fakequantize': 'FixedFakeQuantize',
     'a_fakequantize': 'FixedFakeQuantize',
 }
-# prepare_custom_config_dict = {'extra_qconfig_dict': extra_qconfig_dict}
-prepare_custom_config_dict = {
-    'extra_qconfig_dict': extra_qconfig_dict
-}
+
+prepare_custom_config_dict = {'extra_qconfig_dict': extra_qconfig_dict}
+
 model = prepare_by_platform(model, BackendType.Tensorrt, prepare_custom_config_dict)
-print(model, flush=True)
+
+# print(model, flush=True)
 #########################################
 
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model = model.to(device)
-# Multi GPU
-model = torch.nn.DataParallel(model, device_ids=[0, 1])
+model = torch.nn.DataParallel(model)
 
 # Loss Function
 criterion = nn.CrossEntropyLoss()
@@ -155,10 +161,10 @@ exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=3, gamma=0.1)
 train_dataset, val_dataset, _ = get_dataset()
 
 train_loaders = torch.utils.data.DataLoader(
-    train_dataset, batch_size=256, shuffle=True, num_workers=8
+    train_dataset, batch_size=512, shuffle=True, num_workers=8
 )
 val_loaders = torch.utils.data.DataLoader(
-    val_dataset, batch_size=128, shuffle=True, num_workers=8
+    val_dataset, batch_size=256, shuffle=True, num_workers=8
 )
 
 
@@ -208,12 +214,21 @@ model = train_model(
     criterion,
     optimizer_ft,
     exp_lr_scheduler,
-    num_epochs=3,
+    device,
+    num_epochs=2,
 )
 
 model.eval()
-torch.save(model.state_dict(), "models/mbv2_tiny_imagenet_fixed_fbn_v2.pth")
 
-convert_deploy(model.module, BackendType.Tensorrt, {'x': [1, 3, 224, 224]}, model_name='mbv2_tiny_imagenet_fixed_mse_fbn_v2')
+model_dir = "/mnt/share_disk/bruce_trie/workspace/Quantizer-Tools/MQBench/Examples/models"
+
+torch.save(model.state_dict(), f"{model_dir}/mbv2_tiny_imagenet_fixed_fbn_v2.pth")
+
+convert_deploy(
+    model.module, 
+    BackendType.Tensorrt, 
+    {'x': [1, 3, 224, 224]}, 
+    model_name='mbv2_tiny_imagenet_fixed_mse_fbn_v2'
+)
 
 

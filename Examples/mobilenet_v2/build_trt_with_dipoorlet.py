@@ -65,9 +65,7 @@ def main():
     if not os.path.exists(onnx_file):
         print("LOAD ONNX FILE FAILED: ", onnx_file)
 
-    print(
-        "Load ONNX file from:%s \nStart export, Please wait a moment..." % (onnx_file)
-    )
+    print("Load ONNX file from:%s \nStart export, Please wait a moment..." % (onnx_file))
     buildEngine(onnx_file, engine_file, json_path)
     print("Export ENGINE success, Save as: ", engine_file)
 

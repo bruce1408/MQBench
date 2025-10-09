@@ -6,7 +6,7 @@ import time
 import torch
 from PIL import Image
 from calibrator import Preprocess
-from code.dataset import get_dataset
+from dataset import get_dataset
 
 TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
 EXPLICIT_BATCH = 1 << (int)(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
@@ -30,15 +30,18 @@ def allocate_buffers(engine):
     bindings = []
     stream = cuda.Stream()
     for binding in engine:
-        size = trt.volume(engine.get_binding_shape(binding)) * engine.max_batch_size
-        dtype = trt.nptype(engine.get_binding_dtype(binding))
+        shape = engine.get_tensor_shape(binding)
+        dtype = trt.nptype(engine.get_tensor_dtype(binding))
+        size = trt.volume(shape)
+        
         # Allocate host and device buffers
         host_mem = cuda.pagelocked_empty(size, dtype)
         device_mem = cuda.mem_alloc(host_mem.nbytes)
+        
         # Append the device buffer to device bindings.
         bindings.append(int(device_mem))
         # Append to the appropriate list.
-        if engine.binding_is_input(binding):
+        if engine.get_tensor_mode(binding) == trt.TensorIOMode.INPUT:
             inputs.append(HostDeviceMem(host_mem, device_mem))
         else:
             outputs.append(HostDeviceMem(host_mem, device_mem))
@@ -48,14 +51,16 @@ def allocate_buffers(engine):
 def do_inference(context, bindings, inputs, outputs, stream, batch_size=1):
     # Transfer data from CPU to the GPU.
     [cuda.memcpy_htod_async(inp.device, inp.host, stream) for inp in inputs]
+    
     # Run inference.
-    context.execute_async(
-        batch_size=batch_size, bindings=bindings, stream_handle=stream.handle
-    )
+    context.execute_async_v2(bindings=bindings, stream_handle=stream.handle)
+    
     # Transfer predictions back from the GPU.
     [cuda.memcpy_dtoh_async(out.host, out.device, stream) for out in outputs]
+    
     # Synchronize the stream
     stream.synchronize()
+    
     # Return only the host outputs.
     return [out.host for out in outputs]
 
@@ -78,13 +83,12 @@ def main(mode):
         val_dataset, batch_size=1, shuffle=True, num_workers=8
     )
 
-    engine_file = "trt/mobilev2_model_dipoorlet_brecq_{}.engine".format(mode)
+    # engine_file = "trt/mobilev2_model_dipoorlet_brecq_{}.engine".format(mode)
+    engine_file = f"/mnt/share_disk/bruce_trie/workspace/Quantizer-Tools/_outputs/mqbench_log/mobilev2_model_{mode}.engine"
     engine = deserializing_engine(engine_file)
 
     context = engine.create_execution_context()
-    inputs, outputs, bindings, stream = allocate_buffers(
-        engine
-    )
+    inputs, outputs, bindings, stream = allocate_buffers(engine)
 
     # Do inference
     shape_of_output = (1, 200)
@@ -109,11 +113,14 @@ def main(mode):
 
 
 if __name__ == "__main__":
-    # main("fp16")
-    main("int8")
+    main("fp16")
+    # main("int8")
 
 # pytorch
 # Accuracy : 67.7699966430664%
+
+# trt fp16
+# Accuracy with TRT fp16 infer : 71.70999908447266%
 
 # trt KL INT8
 # Accuracy with TRT int8 infer : 65.06999969482422%

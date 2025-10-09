@@ -29,7 +29,7 @@ def train_model(
         # Each epoch has a training and validation phase
         for phase in ["train", "val"]:
             if phase == "train":
-                scheduler.step()
+                # scheduler.step()
                 model.train()  # Set model to training mode
             else:
                 model.eval()  # Set model to evaluate mode
@@ -87,6 +87,8 @@ def train_model(
         print("Val Loss: {:.4f} Acc: {:.4f}".format(val_loss, val_acc), flush=True)
         print("Best Val Accuracy: {}".format(best_acc), flush=True)
         print()
+        scheduler.step()
+        
 
     time_elapsed = time.time() - since
     print(
@@ -100,10 +102,16 @@ def train_model(
     model.load_state_dict(best_model_wts)
     return model
 
-
+if torch.cuda.is_available():
+    num_gpus = torch.cuda.device_count()
+    print(f"--- PyTorch can see {num_gpus} GPUs ---")
+    if num_gpus < 2:
+        print("--- WARNING: DataParallel will not be effective with less than 2 GPUs. ---")
+else:
+    print("--- CUDA is not available, running on CPU. ---")
 
 model = mobilenet_v2(num_classes=200)
-model_path= "/mnt/share_disk/bruce_trie/workspace/Quantizer-Tools/MQBench/Examples/mobilenet_v2/scripts/mobilenet_v2-b0353104.pth"
+model_path= "/mnt/share_disk/bruce_trie/workspace/Quantizer-Tools/MQBench/Examples/models/mobilenet_v2-b0353104.pth"
 weight_imagenet = torch.load(model_path)
 weight_imagenet.pop("classifier.1.weight")
 weight_imagenet.pop("classifier.1.bias")
@@ -114,8 +122,9 @@ model.train()
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model = model.to(device)
+
 # Multi GPU
-model = torch.nn.DataParallel(model, device_ids=[0, 1])
+model = torch.nn.DataParallel(model)
 
 # Loss Function
 criterion = nn.CrossEntropyLoss()
@@ -128,10 +137,11 @@ exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
 train_dataset, val_dataset, _ = get_dataset()
 
 train_loaders = torch.utils.data.DataLoader(
-    train_dataset, batch_size=256, shuffle=True, num_workers=8
+    train_dataset, batch_size=512, shuffle=True, num_workers=8
 )
+
 val_loaders = torch.utils.data.DataLoader(
-    val_dataset, batch_size=128, shuffle=True, num_workers=8
+    val_dataset, batch_size=512, shuffle=True, num_workers=8
 )
 
 
@@ -154,4 +164,4 @@ model = train_model(
 )
 
 model.eval()
-torch.save(model.state_dict(), "/mnt/share_disk/bruce_trie/workspace/Quantizer-Tools/MQBench/Examples/mobilenet_v2/scripts/models/mbv2_fp16.pth")
+torch.save(model.state_dict(), "/mnt/share_disk/bruce_trie/workspace/Quantizer-Tools/MQBench/Examples/models/mbv2_fp16.pth")
