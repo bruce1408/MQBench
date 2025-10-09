@@ -90,7 +90,7 @@ def convert_onnx(model: GraphModule, input_shape_dict, dummy_input, onnx_model_p
             opset_version=opset_version,
             dynamic_axes=dynamic_axes,
             do_constant_folding=True,
-            # custom_opsets={'' : opset_version}
+            custom_opsets={'' : opset_version}
         )
 
 

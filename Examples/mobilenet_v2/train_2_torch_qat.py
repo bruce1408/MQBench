@@ -215,7 +215,7 @@ model = train_model(
     optimizer_ft,
     exp_lr_scheduler,
     device,
-    num_epochs=2,
+    num_epochs=1,
 )
 
 model.eval()
