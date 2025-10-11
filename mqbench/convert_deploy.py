@@ -76,11 +76,7 @@ def convert_onnx(model: GraphModule, input_shape_dict, dummy_input, onnx_model_p
         dummy_input = tuple(dummy_input.values())
     # Per-channel QuantizeLinear and DequantizeLinear is supported since opset 13
     opset_version = 13 if kwargs.get('deploy_to_qlinear', False) else 13
-    print("the opset version is ==========", opset_version)
     with torch.no_grad():
-        # try:
-        #     from torch.onnx.utils import ONNXCheckerError
-        #     try:
         torch.onnx.export(
             model,
             dummy_input, 
@@ -90,7 +86,7 @@ def convert_onnx(model: GraphModule, input_shape_dict, dummy_input, onnx_model_p
             opset_version=opset_version,
             dynamic_axes=dynamic_axes,
             do_constant_folding=True,
-            # custom_opsets={'' : opset_version}
+            custom_opsets={'' : opset_version}
         )
 
 

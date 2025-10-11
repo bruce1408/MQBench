@@ -4,9 +4,12 @@ import pycuda.driver as cuda
 import tensorrt as trt
 import time
 import torch
+from common.configs import get_cfg_defaults
 from PIL import Image
 from calibrator import Preprocess
 from dataset import get_dataset
+cfg = get_cfg_defaults()
+
 
 TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
 EXPLICIT_BATCH = 1 << (int)(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
@@ -77,14 +80,10 @@ def deserializing_engine(engine_file):
     return runtime.deserialize_cuda_engine(serialized_engine)
 
 
-def main(mode):
+def main(engine_file, mode="int8"):
     _, val_dataset, _ = get_dataset()
-    val_loaders = torch.utils.data.DataLoader(
-        val_dataset, batch_size=1, shuffle=True, num_workers=8
-    )
+    val_loaders = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=8)
 
-    # engine_file = "trt/mobilev2_model_dipoorlet_brecq_{}.engine".format(mode)
-    engine_file = f"/mnt/share_disk/bruce_trie/workspace/Quantizer-Tools/_outputs/mqbench_log/mobilev2_model_{mode}_tiny.engine"
     engine = deserializing_engine(engine_file)
 
     context = engine.create_execution_context()
@@ -114,7 +113,8 @@ def main(mode):
 
 if __name__ == "__main__":
     # main("fp16")
-    main("int8")
+    engine_file = f"{cfg.SYSTEM.MODELS_DIR}/mbv2_tiny_imagenet_fixed_mse_fbn_v2_best_deploy_model_true.engine"
+    main(engine_file, "int8")
 
 # pytorch
 # Accuracy : 67.259%
@@ -125,6 +125,13 @@ if __name__ == "__main__":
 # trt KL INT8
 # Accuracy with TRT int8 infer : 66.46%
 
+# qat trt int8
+# Accuracy with TRT int8 infer : 70.1%
+
+# qat trt int8 设置 conv_fused为true的话
+# Accuracy with TRT int8 infer  69.96%
+
+#####
 # dipoorlet MSE INT8
 # Accuracy with TRT int8 infer : 66.54000091552734%
 

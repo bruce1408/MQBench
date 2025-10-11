@@ -34,10 +34,10 @@ def buildEngine(
 
 
 def main(mode="int8"):
-    onnx_file = f"{cfg.SYSTEM.MODELS_DIR}/mobile_v2_best_model_basic_tiny.onnx"
+    # onnx_file = f"{cfg.SYSTEM.MODELS_DIR}/mobile_v2_best_model_basic_tiny.onnx"
     engine_file = f"{cfg.MQBENCH.mqbench_log_dir}/mobilev2_model_{mode}_tiny.engine"
     calibration_cache = f"{cfg.MQBENCH.mqbench_log_dir}/trt/mobilev2_model_calib.cache"
-
+    
     dataloader = CalibDataLoader(batch_size=1, calib_count=1000)
 
     if not os.path.exists(onnx_file):
