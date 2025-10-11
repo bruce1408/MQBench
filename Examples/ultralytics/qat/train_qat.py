@@ -5,7 +5,7 @@ import torch
 from mqbench.prepare_by_platform import prepare_by_platform, BackendType
 from mqbench.convert_deploy import convert_deploy
 from mqbench.utils.state import enable_calibration, enable_quantization
-from preprocess import CalibDataset
+# from preprocess import CalibDataset
 from torch.utils.data import DataLoader
 
 
@@ -23,6 +23,7 @@ extra_qconfig_dict = {
     'w_fakequantize': 'FixedFakeQuantize',
     'a_fakequantize': 'FixedFakeQuantize',
 }
+
 leaf_module = (Chunk, Cat, DetectPost)
 
 prepare_custom_config_dict = {
@@ -48,6 +49,7 @@ info = {
 }
 
 
+exit(0)
 dataset = CalibDataset("/mnt/share/yongyang/projects/mqb/L6/datasets/coco2017_yolo_labels/coco/images/train2017", 512, info)
 dataloader = DataLoader(dataset, batch_size=8, shuffle=True)
 
